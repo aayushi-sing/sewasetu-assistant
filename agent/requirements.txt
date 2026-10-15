@@ -1,0 +1,11 @@
+# Agent (MCP) services. Kept separate from app/requirements.txt on purpose:
+# the MCP SDK needs PyJWT>=2.10.1 while the portal pins PyJWT==2.9.0.
+mcp>=1.9,<2
+Flask==2.2.5
+Werkzeug<3
+psycopg2-binary==2.9.9
+requests>=2.31
+fpdf2==2.7.4
+PyJWT[crypto]>=2.10.1
+httpx>=0.27
+pytest>=8.0

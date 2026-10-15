@@ -1,6 +1,0 @@
-   -r app/requirements.txt
-   mcp>=1.9
-   uvicorn>=0.30
-   httpx>=0.27
-   pytest>=8.0
-   python-dotenv>=1.0

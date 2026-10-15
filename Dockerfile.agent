@@ -1,0 +1,10 @@
+FROM python:3.11-slim
+WORKDIR /srv
+COPY agent/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+# the portal's own rules module is reused, never copied into the agent code
+COPY app/ /app/
+COPY agent/ /srv/
+ENV PORTAL_PATH=/app
+EXPOSE 9001
+CMD ["python", "citizen_server.py"]

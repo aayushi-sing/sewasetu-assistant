@@ -44,6 +44,26 @@ services:
     expose:
       - "8025"
 
+  # Add this service under `services:` in docker-compose.yml
+  citizen-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    ports:
+      - "9001:9001"
+    environment:
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}          # same value as the portal
+      PORTAL_JWKS_URL: http://app:8000/.well-known/jwks.json              # internal fetch of the keys
+      CITIZEN_RESOURCE_URL: ${CITIZEN_RESOURCE_URL:-http://localhost:9001/mcp}
+      CITIZEN_PORT: "9001"
+    depends_on:
+      - db
+      - app
+      - smsgw
+    volumes:
+      - uploads:/var/sewasetu/uploads
+
+
 volumes:
   pgdata:
   uploads:

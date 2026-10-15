@@ -1,0 +1,8 @@
+venv/
+.venv/
+.git/
+**/__pycache__/
+**/*.pyc
+DECISIONS.md
+DIRECTOR-NOTE.mp3
+node_modules/

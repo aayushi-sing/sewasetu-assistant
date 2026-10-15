@@ -1,6 +1,9 @@
 services:
   db:
     image: postgres:15
+    # smaller memory footprint; the 100k-row seed and all queries behave the same
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "max_connections=60",
+              "-c", "work_mem=4MB", "-c", "maintenance_work_mem=64MB"]
     environment:
       POSTGRES_DB: sewasetu
       POSTGRES_USER: sewasetu
@@ -9,9 +12,18 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./app/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
       - ./seed/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+    healthcheck:
+      # -h 127.0.0.1 so it only passes once the real server is up, after the seed has loaded
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U sewasetu -d sewasetu"]
+      interval: 5s
+      timeout: 3s
+      retries: 40
+    restart: unless-stopped
 
   app:
     build: ./app
+    # same app, 2 gunicorn workers instead of 4 (about half the memory)
+    command: ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "30", "app:app"]
     ports:
       - "8000:8000"
     environment:
@@ -21,30 +33,15 @@ services:
       # discovery documents, so it must be the public one when deployed
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
     depends_on:
-      - db
-      - smsgw
+      db:
+        condition: service_healthy
+      smsgw:
+        condition: service_started
     volumes:
       - uploads:/var/sewasetu/uploads
       - applogs:/var/log/sewasetu
+    restart: unless-stopped
 
-  scheduler:
-    build: ./app
-    # Run the deemed-approval job once at startup (so a freshly restored
-    # database is brought up to date), then hand over to cron for the nightly run.
-    command: ["sh", "-c", "until python /app/scripts/deemed_approval.py; do sleep 5; done; exec cron -f"]
-    depends_on:
-      - db
-    volumes:
-      - applogs:/var/log/sewasetu
-
-  smsgw:
-    build: ./smsgw
-    # internal only — reached by the app over the docker network and exposed to
-    # users via the app at /__gateway/ (so no second host port is needed)
-    expose:
-      - "8025"
-
-  # Add this service under `services:` in docker-compose.yml
   citizen-mcp:
     build:
       context: .
@@ -53,16 +50,42 @@ services:
       - "9001:9001"
     environment:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}          # same value as the portal
-      PORTAL_JWKS_URL: http://app:8000/.well-known/jwks.json              # internal fetch of the keys
+      PORTAL_JWKS_URL: http://app:8000/.well-known/jwks.json              # keys fetched inside the network
       CITIZEN_RESOURCE_URL: ${CITIZEN_RESOURCE_URL:-http://localhost:9001/mcp}
       CITIZEN_PORT: "9001"
     depends_on:
-      - db
-      - app
-      - smsgw
+      db:
+        condition: service_healthy
+      app:
+        condition: service_started
+      smsgw:
+        condition: service_started
     volumes:
       - uploads:/var/sewasetu/uploads
+    restart: unless-stopped
 
+  smsgw:
+    build: ./smsgw
+    # internal only: reached by the app over the docker network and exposed to
+    # users via the app at /__gateway/ (so no second host port is needed)
+    expose:
+      - "8025"
+    restart: unless-stopped
+
+  scheduler:
+    build: ./app
+    # Not started by default (saves memory while developing). Start it with:
+    #   docker compose --profile full up -d
+    profiles: ["full"]
+    # Run the deemed-approval job once at startup (so a freshly restored
+    # database is brought up to date), then hand over to cron for the nightly run.
+    command: ["sh", "-c", "until python /app/scripts/deemed_approval.py; do sleep 5; done; exec cron -f"]
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - applogs:/var/log/sewasetu
+    restart: unless-stopped
 
 volumes:
   pgdata:

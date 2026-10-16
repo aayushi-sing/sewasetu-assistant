@@ -46,6 +46,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.agent
+    image: sewasetu-agent          # both MCP servers share one image
     ports:
       - "9001:9001"
     environment:
@@ -62,6 +63,26 @@ services:
         condition: service_started
     volumes:
       - uploads:/var/sewasetu/uploads
+    restart: unless-stopped
+
+  officer-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    image: sewasetu-agent
+    command: ["python", "officer_server.py"]
+    ports:
+      - "9002:9002"
+    environment:
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
+      PORTAL_JWKS_URL: http://app:8000/.well-known/jwks.json
+      OFFICER_RESOURCE_URL: ${OFFICER_RESOURCE_URL:-http://localhost:9002/mcp}
+      OFFICER_PORT: "9002"
+    depends_on:
+      db:
+        condition: service_healthy
+      app:
+        condition: service_started
     restart: unless-stopped
 
   smsgw:

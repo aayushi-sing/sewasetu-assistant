@@ -337,7 +337,7 @@ def status(mobile):
         item = {"application_no": no, "status": st, "block": block,
                 "submitted_on": sub.strftime("%d/%m/%Y") if sub else None}
         if st == "PENDING" and sub:
-            waited = (portal.now_ist() - sub).days
+            waited = (datetime.now() - sub).days
             item["days_waiting"] = waited
             item["auto_approval_date"] = (sub + timedelta(days=portal.SLA_DAYS)).strftime("%d/%m/%Y")
         if dec:

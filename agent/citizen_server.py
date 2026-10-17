@@ -127,6 +127,12 @@ def sign_out() -> dict:
     return core.sign_out(_subject())
 
 
+@mcp.custom_route("/eval-dashboard", methods=["GET"])
+async def eval_dashboard(request: Request):
+    from evals import dashboard
+    return HTMLResponse(dashboard.render())
+
+
 # ---- the one-time upload page (the link itself is the credential) -------------------------
 PAGE = """<!doctype html><html lang="en"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">

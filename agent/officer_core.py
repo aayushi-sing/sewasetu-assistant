@@ -142,6 +142,9 @@ def get_case(application_no):
     cur.execute("SELECT count(*) FROM applications WHERE mobile=%s AND id<>%s",
                 (row["mobile"], row["id"]))
     earlier = cur.fetchone()[0]
+    cur.execute("SELECT note FROM audit_log WHERE application_id=%s AND action='FLAG' ORDER BY at",
+                (row["id"],))
+    raised = [_txt(r[0], 300) for r in cur.fetchall()]
     cur.close(); conn.close()
     today = portal.now_ist().date()
     pending = row["status"] == "PENDING"
@@ -158,7 +161,8 @@ def get_case(application_no):
         "ifsc": row["ifsc"], "age_proof_on_file": bool(row["doc_path"]),
         "eligibility_problems": errors,
         "flags": {"same_bank_account_on_other_live_application": same_bank,
-                  "other_applications_from_this_mobile": earlier},
+                  "other_applications_from_this_mobile": earlier,
+                  "raised_by_the_system": raised},
         "can_be_approved": pending and not errors,
         "can_be_rejected": pending,
         "audit_trail": trail, "note": DATA_NOTE,

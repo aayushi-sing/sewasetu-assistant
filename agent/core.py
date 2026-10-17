@@ -41,6 +41,9 @@ FIELD_HELP = {
 def ensure_schema():
     conn = portal.get_db()
     cur = conn.cursor()
+    # Both MCP servers run this at start-up, possibly at the same moment; CREATE TABLE IF NOT
+    # EXISTS can collide in Postgres, so take a lock so only one runs the set-up at a time.
+    cur.execute("SELECT pg_advisory_lock(727001)")
     cur.execute("""
         CREATE TABLE IF NOT EXISTS agent_drafts (
             mobile          VARCHAR(20) PRIMARY KEY,
@@ -64,6 +67,21 @@ def ensure_schema():
             subject VARCHAR(80) PRIMARY KEY,
             at      TIMESTAMP NOT NULL
         )""")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS agent_eval_runs (
+            run_id     VARCHAR(40) NOT NULL,
+            started_at TIMESTAMP NOT NULL,
+            persona_no INTEGER NOT NULL,
+            data       TEXT NOT NULL,
+            PRIMARY KEY (run_id, persona_no)
+        )""")
+    conn.commit()                       # make the tables visible BEFORE letting the next server in
+    try:                                # an existing database: make application numbers unique
+        cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_app_no ON applications(application_no)")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    cur.execute("SELECT pg_advisory_unlock(727001)")
     conn.commit()
     cur.close(); conn.close()
 
@@ -160,13 +178,18 @@ def save_draft(mobile, fields):
     for k in DRAFT_FIELDS:
         if k in fields and fields[k] is not None:
             v = str(fields[k])
+            if k == "dob" and data.get("dob") and _clean_text(v, 100) != data["dob"]:
+                # The server cannot know a stated date of birth is false, so changes are counted
+                # and shown to the officer, who checks the age proof.
+                data["_dob_edits"] = int(data.get("_dob_edits", 0)) + 1
             data[k] = _clean_text(v, 100)
     _store(cur, mobile, data, doc_path)
     conn.commit()
     cur.close(); conn.close()
     errors, _ = _problems(data, doc_path)
     return {
-        "saved": {k: (mask_account(v) if k == "bank_account" else v) for k, v in data.items()},
+        "saved": {k: (mask_account(v) if k == "bank_account" else v) for k, v in data.items()
+                  if not k.startswith("_")},
         "age_proof_uploaded": bool(doc_path),
         "still_to_fix_or_provide": errors,
         "eligibility": _eligibility_note(data),
@@ -315,6 +338,11 @@ def submit(mobile, preview_token, confirmed):
                 (app_no, mobile))
     cur.execute("UPDATE audit_log SET actor = actor || ' via-assistant' "
                 "WHERE application_id=%s AND action='SUBMIT'", (new_id,))
+    edits = int(data.get("_dob_edits", 0))
+    if edits:
+        portal.write_audit(cur, new_id, "FLAG", "assistant",
+                           "date of birth was changed %d time(s) in the draft before submission; "
+                           "check it against the age proof" % edits)
     conn.commit()
     cur.close(); conn.close()
     portal.send_sms(mobile, "Sewa Setu: application %s received. An AI assistant helped you "

@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_app ON audit_log(application_id);
 CREATE INDEX IF NOT EXISTS idx_app_status_submitted ON applications(status, submitted_at);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_app_no ON applications(application_no);
 
 -- OAuth 2.1 authorization server (third-party applications acting for a citizen or officer)
 CREATE TABLE IF NOT EXISTS oauth_keys (

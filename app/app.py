@@ -1,11 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-Sewa Setu - Old Age Pension Portal
-Government of Purvanchal, Department of Social Welfare
-
-Developed by: Netlink Infosolutions Pvt Ltd (2023)
-Maintained in-house since 02/2026.
-"""
 
 import os
 import io
@@ -105,8 +98,17 @@ def deadline_remaining():
     return int(delta.total_seconds() // 3600)
 
 
-def new_application_no():
-    return "SSP" + datetime.now().strftime("%y") + str(random.randint(100000, 999999))
+def new_application_no(cur=None):
+    """SSP + year + 6 random digits. Against ~100k existing applications a plain random number
+    already belongs to someone else about 1 time in 18, so when a cursor is given, draw again
+    until the number is unused."""
+    while True:
+        no = "SSP" + datetime.now().strftime("%y") + str(random.randint(100000, 999999))
+        if cur is None:
+            return no
+        cur.execute("SELECT 1 FROM applications WHERE application_no = %s", (no,))
+        if cur.fetchone() is None:
+            return no
 
 
 def write_audit(cur, app_id, action, actor, note=""):
@@ -190,7 +192,7 @@ def create_application(cur, mobile, cleaned):
 
     The caller commits. Returns (id, application_no).
     """
-    app_no = new_application_no()
+    app_no = new_application_no(cur)
     cur.execute(
         """INSERT INTO applications
            (application_no, applicant_name, mobile, dob, gender, marital_status,
